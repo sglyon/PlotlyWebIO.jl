@@ -140,6 +140,9 @@ function render(p::WebIOPlot)
     click_obs = p.event_obs["click"]
     relayout_obs = p.event_obs["relayout"]
 
+    # get ready to recieve svg data
+    on(data -> setfield!(p, :svg, data), svg_obs)
+
     ondependencies(p.widget, WebIO.@js function (Plotly)
 
         @var gd = this.dom.querySelector($id);
@@ -189,7 +192,7 @@ function render(p::WebIOPlot)
         gd.on("plotly_click", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "click");
             if !(filtered_data.isnil)
-                click_obs[] = filtered_data.out
+                $click_obs[] = filtered_data.out
             end
         end)
     end)
