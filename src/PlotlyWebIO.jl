@@ -5,7 +5,7 @@ module PlotlyWebIO
 export WebIOPlot, render
 
 using Reexport
-@reexport using PlotlyJS
+@reexport using PlotlyBase
 using WebIO
 import WebIO.render
 using JSON
@@ -29,17 +29,7 @@ function log_events()
     PlotlyEvents(log_args, log_args, log_args, log_args, log_args)
 end
 
-mutable struct WebIOPlot
-    p::PlotlyJS.Plot
-    widget::Widget
-    svg::String
-    api_obs::Dict{String,Observable}
-    event_functions::PlotlyEvents
-    event_data::Dict{String,Dict}
-    event_obs::Dict{String,Observable}
-end
-
-function setup_api_obs(p::PlotlyJS.Plot, widget::Widget)
+function setup_api_obs(p::PlotlyBase.Plot, widget::Widget)
     svg_obs = Observable(widget, "svg-string", "")
     api_obs = Dict{String,Observable}("svg" => svg_obs)
     id = string("#plot-", p.divid)
@@ -110,6 +100,16 @@ function bind_events!(
         on(data -> setindex!(event_data, data, name), event_obs[name])
     end
     # TODO: hook up event_functions
+end
+
+mutable struct WebIOPlot
+    p::PlotlyBase.Plot
+    widget::Widget
+    svg::String
+    api_obs::Dict{String,Observable}
+    event_functions::PlotlyEvents
+    event_data::Dict{String,Dict}
+    event_obs::Dict{String,Observable}
 end
 
 function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
@@ -217,15 +217,15 @@ end
 
 RestyleArgs() = RestyleArgs(nothing, Dict())
 
-function PlotlyJS.restyle!(
+function PlotlyBase.restyle!(
         plt::WebIOPlot, ind::Union{Int,AbstractVector{Int}},
         update::Associative=Dict();
         kwargs...)
-    args = RestyleArgs(ind-1, merge(update, PlotlyJS.prep_kwargs(kwargs)))
+    args = RestyleArgs(ind-1, merge(update, PlotlyBase.prep_kwargs(kwargs)))
     plt.api_obs["restyle"][] = args
 end
 
-function PlotlyJS.restyle!(plt::WebIOPlot, update::Associative=Dict(); kwargs...)
+function PlotlyBase.restyle!(plt::WebIOPlot, update::Associative=Dict(); kwargs...)
     restyle!(plt, 1:length(plt.p.data), update; kwargs...)
 end
 
@@ -234,8 +234,8 @@ struct RelayoutArgs <: PlotlyAPIArgs
 end
 
 RelayoutArgs() = RelayoutArgs(Dict())
-function PlotlyJS.relayout!(plt::WebIOPlot, update::Associative=Dict(); kwargs...)
-    args = RelayoutArgs(merge(update, PlotlyJS.prep_kwargs(kwargs)))
+function PlotlyBase.relayout!(plt::WebIOPlot, update::Associative=Dict(); kwargs...)
+    args = RelayoutArgs(merge(update, PlotlyBase.prep_kwargs(kwargs)))
     plt.api_obs["relayout"][] = args
 end
 
@@ -247,18 +247,17 @@ end
 
 UpdateArgs() = UpdateArgs(nothing, Dict(), Dict())
 
-function PlotlyJS.update!(
+function PlotlyBase.update!(
         plt::WebIOPlot, ind::Union{Int,AbstractVector{Int}},
         update::Associative=Dict();
         layout::Layout=Layout(),
         kwargs...)
-    args = UpdateArgs(ind-1, merge(update, PlotlyJS.prep_kwargs(kwargs)), layout)
+    args = UpdateArgs(ind-1, merge(update, PlotlyBase.prep_kwargs(kwargs)), layout)
     plt.api_obs["update"][] = args
 end
 
-function PlotlyJS.update!(plt::WebIOPlot, update::Associative=Dict(); kwargs...)
-    PlotlyJS.update!(plt, 1:length(plt.p.data), update; kwargs...)
+function PlotlyBase.update!(plt::WebIOPlot, update::Associative=Dict(); kwargs...)
+    PlotlyBase.update!(plt, 1:length(plt.p.data), update; kwargs...)
 end
-
 
 end # module
