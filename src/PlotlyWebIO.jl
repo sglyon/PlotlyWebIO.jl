@@ -111,12 +111,20 @@ mutable struct WebIOPlot
     event_data::Dict{String,Dict}
     event_obs::Dict{String,Observable}
 end
+Base.show(io::IO, mm::MIME"text/plain", p::WebIOPlot) = show(io, mm, p.p)
 
 function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
     p = Plot(args...; kwargs...)
     # TODO: figure out how to load locally in IJulia)
-    # widget = Widget(dependencies=["/pkg/PlotlyJS/plotly-latest.min.js"])
-    widget = Widget(dependencies=["https://cdn.plot.ly/plotly-latest.min.js"])
+    # deps = [
+    #     "/pkg/PlotlyJS/plotly-latest.min.js",
+    #     "/pkg/PlotlyWebIO/plotly_webio_bundle.js"
+    # ]
+    deps = [
+        "https://cdn.plot.ly/plotly-latest.min.js",
+        "https://github.com/sglyon/PlotlyWebIO.jl/releases/download/assets/plotly_webio_bundle.js"
+    ]
+    widget = Widget(dependencies=deps)
     api_obs = setup_api_obs(p, widget)
 
     event_data = Dict{String,Dict}()
@@ -159,6 +167,15 @@ function render(p::WebIOPlot)
         window.onresize = function()
             Plotly.Plots.resize(gd)
         end
+
+        # I think this triggers too often (even on scroll/zoom)
+        # gd.on("plotly_afterplot", function()
+        #     Plotly.toImage(gd, $(Dict("format" => "svg"))).then(function(data)
+        #         @var svg_data = data.replace("data:image/svg+xml,", "")
+        #         $svg_obs[] = decodeURIComponent(svg_data)
+        #     end)
+        # end
+        # )
 
         gd.on("plotly_hover", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "hover");
