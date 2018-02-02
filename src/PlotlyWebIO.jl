@@ -122,7 +122,7 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
     # ]
     deps = [
         "https://cdn.plot.ly/plotly-latest.min.js",
-        "https://github.com/sglyon/PlotlyWebIO.jl/releases/download/assets/plotly_webio_bundle.js"
+        "https://cdn.jsdelivr.net/gh/sglyon/PlotlyWebIO.jl@assets/assets/plotly_webio_bundle.js"
     ]
     widget = Widget(dependencies=deps)
     api_obs = setup_api_obs(p, widget)
