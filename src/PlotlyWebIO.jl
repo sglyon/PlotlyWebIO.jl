@@ -124,7 +124,7 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
         "https://cdn.plot.ly/plotly-latest.min.js",
         "https://cdn.jsdelivr.net/gh/sglyon/PlotlyWebIO.jl@assets/assets/plotly_webio_bundle.js"
     ]
-    widget = Widget(dependencies=deps)
+    widget = Widget(imports=deps)
     api_obs = setup_api_obs(p, widget)
 
     event_data = Dict{String,Dict}()
@@ -151,7 +151,7 @@ function render(p::WebIOPlot)
     # get ready to recieve svg data
     on(data -> setfield!(p, :svg, data), svg_obs)
 
-    ondependencies(p.widget, WebIO.@js function (Plotly)
+    onimport(p.widget, WebIO.@js function (Plotly)
 
         @var gd = this.dom.querySelector($id);
         Plotly.newPlot(

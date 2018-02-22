@@ -1,7 +1,7 @@
 {
   "name": "assets",
   "version": "1.0.0",
-  "description": "",
+  "description": "WebIO.jl support for plotly",
   "main": "index.js",
   "dependencies": {
     "ramda": "^0.24.1"
@@ -13,6 +13,6 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "author": "Spencer Lyon",
+  "license": "MIT"
 }
