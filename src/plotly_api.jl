@@ -6,52 +6,51 @@ function setup_api_obs(p::PlotlyBase.Plot, widget::Widget)
     api_obs = Dict{String,Observable}("svg" => svg_obs)
     id = string("#plot-", p.divid)
 
-    # set up restyle
+
+    # build strings for javascript callback functions
+    io = IOBuffer()
+    set_svg_expr = WebIO.obs_set_expr(io, svg_obs, "decodeURIComponent(svg_data)")
+    set_svg = String(io)
+    gd_string = """var gd = this.dom.querySelector("$id");"""
+    save_svg_string =
+        """.then((function(gd) {
+          return Plotly.toImage(gd, {
+            "format": "svg"
+          })
+        })).then((function(data) {
+          var svg_data = data.replace("data:image/svg+xml,", "");
+          return $set_svg
+        }))
+      })"""
+
+    # set up observables
     restyle_obs = Observable(widget, "restyle_args", RestyleArgs())
     api_obs["restyle"] = restyle_obs
 
-    onjs(restyle_obs, @js function(val)
-        @var gd = this.dom.querySelector($id);
-        Plotly.restyle(gd, val.data, val.traces).then(function(gd)
-            Plotly.toImage(gd, $(Dict("format" => "svg")))
-        end
-        ).then(function(data)
-            @var svg_data = data.replace("data:image/svg+xml,", "")
-            $svg_obs[] = decodeURIComponent(svg_data)
-        end
-        );
-    end)
-
-    # set up relayout
     relayout_obs = Observable(widget, "relayout_args", RelayoutArgs())
     api_obs["relayout"] = relayout_obs
 
-    onjs(relayout_obs, @js function(val)
-        Plotly.relayout(gd, val.data).then(function(gd)
-            Plotly.toImage(gd, $(Dict("format" => "svg")))
-        end
-        ).then(function(data)
-            @var svg_data = data.replace("data:image/svg+xml,", "")
-            $svg_obs[] = decodeURIComponent(svg_data)
-        end
-        );
-    end)
-
-    # set up update
     update_obs = Observable(widget, "update_args", UpdateArgs())
     api_obs["update"] = update_obs
 
-    onjs(update_obs, @js function(val)
-        @var gd = this.dom.querySelector($id);
-        Plotly.update(gd, val.data, val.layout, val.traces).then(function(gd)
-            Plotly.toImage(gd, $(Dict("format" => "svg")))
-        end
-        ).then(function(data)
-            @var svg_data = data.replace("data:image/svg+xml,", "")
-            $svg_obs[] = decodeURIComponent(svg_data)
-        end
-        );
-    end)
+
+    onjs(restyle_obs, WebIO.JSString(
+        """(function(val) {
+          $(gd_string)
+          return this.Plotly.update(gd, val.data, val.traces)$(save_svg_string)"""
+    ))
+
+    onjs(relayout_obs, WebIO.JSString(
+        """(function(val) {
+          $(gd_string)
+          return this.Plotly.update(gd, val.data)$(save_svg_string)"""
+    ))
+
+    onjs(update_obs, WebIO.JSString(
+        """(function(val) {
+          $(gd_string)
+          return this.Plotly.update(gd, val.data, val.layout, val.traces)$(save_svg_string)"""
+    ))
 
     # TODO: addtraces, deletetraces, movetraces, redraw, purge, to_image,
     # download_image, extendtraces, prependtraces

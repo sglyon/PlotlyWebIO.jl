@@ -12,5 +12,5 @@ using JSON
 include("events.jl")
 include("plot_type.jl")
 include("plotly_api.jl")
-    
+
 end # module
