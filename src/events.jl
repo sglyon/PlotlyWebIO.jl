@@ -18,12 +18,12 @@ function log_events()
 end
 
 
-function setup_events(widget::Widget)
+function setup_events(scope::Scope)
     # set up observables for event data
     event_data = Dict{String,Dict}()
     event_obs = Dict{String,Observable}()
     for name in ["hover", "selected", "click", "relayout"]
-        event_obs[name] = Observable(widget, string("on-", name), Dict())
+        event_obs[name] = Observable(scope, string("on-", name), Dict())
         event_data[name] = Dict()
         on(data -> setindex!(event_data, data, name), event_obs[name])
     end

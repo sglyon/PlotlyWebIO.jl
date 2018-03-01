@@ -1,6 +1,6 @@
 mutable struct WebIOPlot
     p::PlotlyBase.Plot
-    widget::Widget
+    scope::Scope
     svg::String
     api_obs::Dict{String,Observable}
     event_functions::PlotlyEvents
@@ -17,17 +17,17 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
     options = Dict("showLink"=> false)
     id = string("#plot-", p.divid)
 
-    # setup widget
+    # setup scope
     deps = [
         "Plotly" => "/pkg/PlotlyJS/plotly-latest.min.js",
         "/pkg/PlotlyWebIO/plotly_webio_bundle.js"
     ]
-    widget = Widget(imports=deps)
-    widget.dom = dom"div"(id=string("plot-", p.divid))
+    scope = Scope(imports=deps)
+    scope.dom = dom"div"(id=string("plot-", p.divid))
 
     # set up observables for plotly.js api function calls and events
-    api_obs = setup_api_obs(p, widget)
-    event_obs, event_data = setup_events(widget)
+    api_obs = setup_api_obs(p, scope)
+    event_obs, event_data = setup_events(scope)
 
     # unpack Observables so we can hook them up in our js below
     svg_obs = api_obs["svg"]
@@ -88,9 +88,9 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
     end
     print(io, "}")
 
-    onimport(widget, WebIO.JSString(String(io)))
+    onimport(scope, WebIO.JSString(String(io)))
 
-    out = WebIOPlot(p, widget, "", api_obs, events, event_data, event_obs)
+    out = WebIOPlot(p, scope, "", api_obs, events, event_data, event_obs)
     on(data -> setfield!(out, :svg, data), svg_obs)
     out
 end

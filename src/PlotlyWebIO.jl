@@ -8,6 +8,7 @@ using Reexport
 @reexport using PlotlyBase
 using WebIO
 using JSON
+using JSExpr
 
 include("events.jl")
 include("plot_type.jl")

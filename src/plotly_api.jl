@@ -1,20 +1,20 @@
 # ------------ #
 # Web IO stuff #
 # ------------ #
-function setup_api_obs(p::PlotlyBase.Plot, widget::Widget)
-    svg_obs = Observable(widget, "svg-string", "")
+function setup_api_obs(p::PlotlyBase.Plot, scope::Scope)
+    svg_obs = Observable(scope, "svg-string", "")
     api_obs = Dict{String,Observable}("svg" => svg_obs)
     id = string("#plot-", p.divid)
 
 
     # build strings for javascript callback functions
     io = IOBuffer()
-    set_svg_expr = WebIO.obs_set_expr(io, svg_obs, "decodeURIComponent(svg_data)")
+    set_svg_expr = JSExpr.obs_set_expr(io, svg_obs, "decodeURIComponent(svg_data)")
     set_svg = String(io)
     gd_string = """var gd = this.dom.querySelector("$id");"""
     save_svg_string =
         """.then((function(gd) {
-          return Plotly.toImage(gd, {
+          return this.Plotly.toImage(gd, {
             "format": "svg"
           })
         })).then((function(data) {
@@ -24,13 +24,13 @@ function setup_api_obs(p::PlotlyBase.Plot, widget::Widget)
       })"""
 
     # set up observables
-    restyle_obs = Observable(widget, "restyle_args", RestyleArgs())
+    restyle_obs = Observable(scope, "restyle_args", RestyleArgs())
     api_obs["restyle"] = restyle_obs
 
-    relayout_obs = Observable(widget, "relayout_args", RelayoutArgs())
+    relayout_obs = Observable(scope, "relayout_args", RelayoutArgs())
     api_obs["relayout"] = relayout_obs
 
-    update_obs = Observable(widget, "update_args", UpdateArgs())
+    update_obs = Observable(scope, "update_args", UpdateArgs())
     api_obs["update"] = update_obs
 
 
