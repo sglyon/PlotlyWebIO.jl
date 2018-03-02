@@ -36,59 +36,76 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
     click_obs = event_obs["click"]
     relayout_obs = event_obs["relayout"]
 
-    # build string to send to javascript
-    io = IOBuffer()
-    # do plot
-    print(io, """function(Plotly) {
-        var gd = this.dom.querySelector("$id");
+    onimport(scope, JSExpr.@js function (Plotly)
 
-        if (window.Blink !== undefined) {
-            // set css style for auto-resize
+        @var gd = this.dom.querySelector($id);
+        if (window.Blink !== undefined)
+            # // set css style for auto-resize
             gd.style.width = "100%";
             gd.style.height = "100vh";
             gd.style.marginLeft = "0%";
             gd.style.marginTop = "0vh";
-        }
-        Plotly.newPlot(gd,"""
-    )
-    JSON.print(io, lowered[:data])
-    print(io, ", ")
-    JSON.print(io, lowered[:layout])
-    print(io, """, {"showLink": false})""")
+        end
+        Plotly.newPlot(
+            gd, $(lowered[:data]), $(lowered[:layout]), $(options)
+        ).then(function(gd)
+            Plotly.toImage(gd, $(Dict("format" => "svg")))
+        end
+        ).then(function(data)
+            @var svg_data = data.replace("data:image/svg+xml,", "")
+            $svg_obs[] = decodeURIComponent(svg_data)
+        end
+        );
+        window.onresize = function()
+            Plotly.Plots.resize(gd)
+        end
 
-    # save to svg
-    print(io, """.then((function(gd) {
-        return Plotly.toImage(gd, {"format": "svg"})
-    })).then((function(data) {
-      var svg_data = data.replace("data:image/svg+xml,", "");
-      return """
-    )
-    WebIO.obs_set_expr(io, svg_obs, :(decodeURIComponent(svg_data)))
-    println(io, "}));")
+        # I think this triggers too often (even on scroll/zoom)
+        # gd.on("plotly_afterplot", function()
+        #     Plotly.toImage(gd, $(Dict("format" => "svg"))).then(function(data)
+        #         @var svg_data = data.replace("data:image/svg+xml,", "")
+        #         $svg_obs[] = decodeURIComponent(svg_data)
+        #     end)
+        # end
+        # )
 
-    # make plot resize when window does
-    println(io, "window.onresize = (function() {Plotly.Plots.resize(gd)});")
+        # hook into plotly events
+        gd.on("plotly_hover", function (data)
+            @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "hover");
+            if !(filtered_data.isnil)
+                $hover_obs[] = filtered_data.out
+            end
+        end)
 
-    # set up event listeners that populate event obs data
-    for (event_name, obs) in zip(["hover", "selected", "relayout", "click"],
-                                 [hover_obs, selected_obs, relayout_obs, click_obs])
-        print(io, "gd.on('plotly_", event_name, "', (function(data) {")
-        print(io, "var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, ")
-        print(io, "'", event_name, "');\nreturn !(filtered_data.isnil) ? (")
-        WebIO.obs_set_expr(io, obs, :(filtered_data.out))
-        print(io, "): undefined")
-        println(io, "}));\n")
-    end
+        gd.on("plotly_unhover", function (data)
+            $hover_obs[] = $(Dict())
+        end)
 
-    # set up event listeners that _empty_ event obs data
-    for (event_name, obs) in zip(["unhover", "deselect"], [hover_obs, selected_obs])
-        print(io, "gd.on('plotly_", event_name, "', function() {")
-        WebIO.obs_set_expr(io, obs, Dict())
-        println(io, "});\n")
-    end
-    print(io, "}")
+        gd.on("plotly_selected", function (data)
+            @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "selected");
+            if !(filtered_data.isnil)
+                $selected_obs[] = filtered_data.out
+            end
+        end)
 
-    onimport(scope, WebIO.JSString(String(io)))
+        gd.on("plotly_deselect", function (data)
+            $selected_obs[] = $(Dict())
+        end)
+
+        gd.on("plotly_relayout", function (data)
+            @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "relayout");
+            if !(filtered_data.isnil)
+                $relayout_obs[] = filtered_data.out
+            end
+        end)
+
+        gd.on("plotly_click", function (data)
+            @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "click");
+            if !(filtered_data.isnil)
+                $click_obs[] = filtered_data.out
+            end
+        end)
+    end)
 
     out = WebIOPlot(p, scope, "", api_obs, events, event_data, event_obs)
     on(data -> setfield!(out, :svg, data), svg_obs)
