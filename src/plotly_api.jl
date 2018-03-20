@@ -56,6 +56,22 @@ function setup_api_obs(p::PlotlyBase.Plot, scope::Scope)
     # TODO: addtraces, deletetraces, movetraces, redraw, purge, to_image,
     # download_image, extendtraces, prependtraces
 
+    # set up addtraces
+    addtraces_obs = Observable(scope, "addtraces_args", AddTracesArgs())
+    api_obs["addtraces"] = addtraces_obs
+
+    onjs(addtraces_obs, @js function(val)
+        @var gd = this.dom.querySelector($id);
+        Plotly.addTraces(gd, val.traces).then(function(gd)
+            Plotly.toImage(gd, $(Dict("format" => "svg")))
+        end
+        ).then(function(data)
+            @var svg_data = data.replace("data:image/svg+xml,", "")
+            $svg_obs[] = decodeURIComponent(svg_data)
+        end
+        );
+    end)
+
     api_obs
 end
 
@@ -122,23 +138,33 @@ end
 #     nothing
 # end
 
-function addtraces!(plt::WebIOPlot, traces::AbstractTrace...)
-    id = plt.p.divid
-    # _call_plotlyjs(jd, "addTraces", traces)
-    dict = traces[1].fields
-    svg_obs = plt.api_obs["svg"]
-    evaljs(plt.scope, @js function(val)
-        @var gd = this.dom.querySelector($id);
-        Plotly.addTraces(gd, $dict).then(function(gd)
-            Plotly.toImage(gd, $(Dict("format" => "svg")))
-        end
-        ).then(function(data)
-            @var svg_data = data.replace("data:image/svg+xml,", "")
-            $svg_obs[] = decodeURIComponent(svg_data)
-        end
-        )
-           end)
+struct AddTracesArgs <: PlotlyAPIArgs
+    traces
 end
+AddTracesArgs() = AddTracesArgs(nothing)
+
+function addtraces!(plt::WebIOPlot, traces::AbstractTrace...)
+    plt.api_obs["addtraces"][] = AddTracesArgs(traces)
+end
+
+# function addtraces!(plt::WebIOPlot, traces::AbstractTrace...)
+#     id = plt.p.divid
+#     # _call_plotlyjs(jd, "addTraces", traces)
+#     dict = traces[1].fields
+#     svg_obs = plt.api_obs["svg"]
+#     @show evaljs(plt.scope, @js 2+2)
+#     evaljs(plt.scope, @js function(val)
+#         @var gd = this.dom.querySelector($id);
+#         Plotly.addTraces(gd, $dict).then(function(gd)
+#             Plotly.toImage(gd, $(Dict("format" => "svg")))
+#         end
+#         ).then(function(data)
+#             @var svg_data = data.replace("data:image/svg+xml,", "")
+#             $svg_obs[] = decodeURIComponent(svg_data)
+#         end
+#         )
+#            end)
+# end
 
 # addtraces!(jd, where::Int, traces::AbstractTrace...) =
 #     _call_plotlyjs(jd, "addTraces", traces, where-1)
