@@ -1,16 +1,15 @@
 mutable struct WebIOPlot
     p::PlotlyBase.Plot
     scope::Scope
-    svg::String
-    api_obs::Dict{String,Observable}
-    event_functions::PlotlyEvents
-    event_data::Dict{String,Dict}
-    event_obs::Dict{String,Observable}
 end
 
-Base.show(io::IO, mm::MIME"text/plain", p::WebIOPlot) = show(io, mm, p.p)
+Base.getindex(p::WebIOPlot, key) = p.scope[key] # look up Observables
 
-function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
+WebIO.render(p::WebIOPlot) = WebIO.render(p.scope)
+Base.show(io::IO, mm::MIME"text/plain", p::WebIOPlot) = show(io, mm, p.p)
+Base.show(io::IO, mm::MIME"text/html", p::WebIOPlot) = show(io, mm, p.scope)
+
+function WebIOPlot(args...; events=Dict(), kwargs...)
     # build plot, get json, setup options
     p = Plot(args...; kwargs...)
     lowered = JSON.lower(p)
@@ -19,46 +18,65 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
 
     # setup scope
     deps = [
-        "Plotly" => "/pkg/PlotlyJS/plotly-latest.min.js",
-        "/pkg/PlotlyWebIO/plotly_webio_bundle.js"
+        "Plotly" => joinpath(@__DIR__, "..", "assets", "plotly-latest.min.js"),
+        joinpath(@__DIR__, "..", "assets", "plotly_webio_bundle.js")
     ]
     scope = Scope(imports=deps)
-    scope.dom = dom"div"(id=string("plot-", p.divid))
+    scope.dom = dom"div"(id=string("plot-", p.divid), events=events)
 
-    # set up observables for plotly.js api function calls and events
-    api_obs = setup_api_obs(p, scope)
-    event_obs, event_data = setup_events(scope)
+    # INPUT: Observables for plot events
+    svg_obs      = scope["svg"] = Observable("")
+    hover_obs    = scope["hover"] = Observable(Dict())
+    selected_obs = scope["selected"] = Observable(Dict())
+    click_obs    = scope["click"] = Observable(Dict())
+    relayout_obs = scope["relayout"] = Observable(Dict())
 
-    # unpack Observables so we can hook them up in our js below
-    svg_obs = api_obs["svg"]
-    hover_obs = event_obs["hover"]
-    selected_obs = event_obs["selected"]
-    click_obs = event_obs["click"]
-    relayout_obs = event_obs["relayout"]
+    # OUTPUT: setup an observable which sends modify commands
+    scope["_commands"] = Observable{Any}([])
+
+    # Do the respective action when _commands is triggered
+    onjs(scope["_commands"], @js function (args)
+        @var fn = args.shift()
+        @var elem = this.plotElem
+        @var Plotly = this.Plotly
+        args.unshift(elem) # use div as first argument
+
+        Plotly[fn].apply(this, args).then(function(gd)
+            Plotly.toImage(elem, Dict("format" => "svg"))
+        end).then(function(data)
+            # TODO: make this optional
+            @var svg_data = data.replace("data:image/svg+xml,", "")
+            $(scope["svg"])[] = decodeURIComponent(svg_data)
+        end)
+    end)
 
     onimport(scope, JSExpr.@js function (Plotly)
 
+        # set up container element
         @var gd = this.dom.querySelector($id);
+
+        # save some vars for later
+        this.plotElem = gd
+        this.Plotly = Plotly
         if (window.Blink !== undefined)
-            # // set css style for auto-resize
+            # set css style for auto-resize
             gd.style.width = "100%";
             gd.style.height = "100vh";
             gd.style.marginLeft = "0%";
             gd.style.marginTop = "0vh";
         end
+
+        window.onresize = () -> Plotly.Plots.resize(gd)
+
+        # Draw plot in container
         Plotly.newPlot(
             gd, $(lowered[:data]), $(lowered[:layout]), $(options)
-        ).then(function(gd)
-            Plotly.toImage(gd, $(Dict("format" => "svg")))
-        end
+        ).then(gd -> Plotly.toImage(gd, Dict("format" => "svg"))
         ).then(function(data)
             @var svg_data = data.replace("data:image/svg+xml,", "")
-            $svg_obs[] = decodeURIComponent(svg_data)
+            $(scope["svg"])[] = decodeURIComponent(svg_data)
         end
         );
-        window.onresize = function()
-            Plotly.Plots.resize(gd)
-        end
 
         # I think this triggers too often (even on scroll/zoom)
         # gd.on("plotly_afterplot", function()
@@ -77,9 +95,7 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
             end
         end)
 
-        gd.on("plotly_unhover", function (data)
-            $hover_obs[] = $(Dict())
-        end)
+        gd.on("plotly_unhover", () -> $hover_obs[] = Dict())
 
         gd.on("plotly_selected", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "selected");
@@ -88,9 +104,7 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
             end
         end)
 
-        gd.on("plotly_deselect", function (data)
-            $selected_obs[] = $(Dict())
-        end)
+        gd.on("plotly_deselect", () -> $selected_obs[] = Dict())
 
         gd.on("plotly_relayout", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "relayout");
@@ -107,7 +121,5 @@ function WebIOPlot(args...; events::PlotlyEvents=PlotlyEvents(), kwargs...)
         end)
     end)
 
-    out = WebIOPlot(p, scope, "", api_obs, events, event_data, event_obs)
-    on(data -> setfield!(out, :svg, data), svg_obs)
-    out
+    WebIOPlot(p, scope)
 end

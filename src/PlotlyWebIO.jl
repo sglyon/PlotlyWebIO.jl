@@ -11,7 +11,6 @@ using JSON
 using JSExpr
 using JSExpr: @var, @new
 
-include("events.jl")
 include("plot_type.jl")
 include("plotly_api.jl")
 
