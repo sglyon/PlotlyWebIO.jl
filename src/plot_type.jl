@@ -9,7 +9,7 @@ WebIO.render(p::WebIOPlot) = WebIO.render(p.scope)
 Base.show(io::IO, mm::MIME"text/plain", p::WebIOPlot) = show(io, mm, p.p)
 Base.show(io::IO, mm::MIME"text/html", p::WebIOPlot) = show(io, mm, p.scope)
 
-function WebIOPlot(args...; kwargs...)
+function WebIOPlot(args...; events=Dict(), kwargs...)
     # build plot, get json, setup options
     p = Plot(args...; kwargs...)
     lowered = JSON.lower(p)
@@ -22,7 +22,7 @@ function WebIOPlot(args...; kwargs...)
         joinpath(@__DIR__, "..", "assets", "plotly_webio_bundle.js")
     ]
     scope = Scope(imports=deps)
-    scope.dom = dom"div"(id=string("plot-", p.divid))
+    scope.dom = dom"div"(id=string("plot-", p.divid), events=events)
 
     # INPUT: Observables for plot events
     svg_obs      = scope["svg"] = Observable("")
@@ -66,16 +66,12 @@ function WebIOPlot(args...; kwargs...)
             gd.style.marginTop = "0vh";
         end
 
-        window.onresize = function()
-            Plotly.Plots.resize(gd)
-        end
+        window.onresize = () -> Plotly.Plots.resize(gd)
 
         # Draw plot in container
         Plotly.newPlot(
             gd, $(lowered[:data]), $(lowered[:layout]), $(options)
-        ).then(function(gd)
-            Plotly.toImage(gd, Dict("format" => "svg"))
-        end
+        ).then(gd -> Plotly.toImage(gd, Dict("format" => "svg"))
         ).then(function(data)
             @var svg_data = data.replace("data:image/svg+xml,", "")
             $(scope["svg"])[] = decodeURIComponent(svg_data)
@@ -99,9 +95,7 @@ function WebIOPlot(args...; kwargs...)
             end
         end)
 
-        gd.on("plotly_unhover", function (data)
-            $hover_obs[] = Dict()
-        end)
+        gd.on("plotly_unhover", () -> $hover_obs[] = Dict())
 
         gd.on("plotly_selected", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "selected");
@@ -110,9 +104,7 @@ function WebIOPlot(args...; kwargs...)
             end
         end)
 
-        gd.on("plotly_deselect", function (data)
-            $selected_obs[] = Dict()
-        end)
+        gd.on("plotly_deselect", () -> $selected_obs[] = Dict())
 
         gd.on("plotly_relayout", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "relayout");
