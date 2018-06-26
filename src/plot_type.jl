@@ -18,18 +18,23 @@ function WebIOPlot(args...; kwargs...)
 
     # setup scope
     deps = [
-        "Plotly" => "/pkg/PlotlyJS/plotly-latest.min.js",
-        "/pkg/PlotlyWebIO/plotly_webio_bundle.js"
+        "Plotly" => joinpath(@__DIR__, "..", "assets", "plotly-latest.min.js"),
+        joinpath(@__DIR__, "..", "assets", "plotly_webio_bundle.js")
     ]
     scope = Scope(imports=deps)
     scope.dom = dom"div"(id=string("plot-", p.divid))
 
-    # Setup input Observables
-    for name in ["hover", "selected", "click", "relayout"]
-        scope[name] = Observable{Any}(Dict())
-    end
+    # INPUT: Observables for plot events
+    svg_obs      = scope["svg"] = Observable("")
+    hover_obs    = scope["hover"] = Observable(Dict())
+    selected_obs = scope["selected"] = Observable(Dict())
+    click_obs    = scope["click"] = Observable(Dict())
+    relayout_obs = scope["relayout"] = Observable(Dict())
 
-    # set up observables for plotly.js api function calls
+    # OUTPUT: setup an observable which sends modify commands
+    scope["_commands"] = Observable{Any}([])
+
+    # Do the respective action when _commands is triggered
     onjs(scope["_commands"], @js function (args)
         @var fn = args.shift()
         @var elem = this.plotElem
@@ -44,13 +49,6 @@ function WebIOPlot(args...; kwargs...)
             $(scope["svg"])[] = decodeURIComponent(svg_data)
         end)
     end)
-
-    # unpack Observables so we can hook them up in our js below
-    svg_obs = scope["svg"] = Observable("")
-    hover_obs = scope["hover"] = Observable(Dict())
-    selected_obs = scope["selected"] = Observable(Dict())
-    click_obs = scope["click"] = Observable(Dict())
-    relayout_obs = scope["relayout"] = Observable(Dict())
 
     onimport(scope, JSExpr.@js function (Plotly)
 
