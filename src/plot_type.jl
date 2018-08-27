@@ -9,11 +9,15 @@ WebIO.render(p::WebIOPlot) = WebIO.render(p.scope)
 Base.show(io::IO, mm::MIME"text/plain", p::WebIOPlot) = show(io, mm, p.p)
 Base.show(io::IO, mm::MIME"text/html", p::WebIOPlot) = show(io, mm, p.scope)
 
-function WebIOPlot(args...; events=Dict(), kwargs...)
+function WebIOPlot(
+        args...;
+        events::AbstractDict=Dict(),
+        options::AbstractDict=Dict("showLink"=> false),
+        kwargs...
+    )
     # build plot, get json, setup options
     p = Plot(args...; kwargs...)
     lowered = JSON.lower(p)
-    options = Dict("showLink"=> false)
     id = string("#plot-", p.divid)
 
     # setup scope
@@ -25,11 +29,11 @@ function WebIOPlot(args...; events=Dict(), kwargs...)
     scope.dom = dom"div"(id=string("plot-", p.divid), events=events)
 
     # INPUT: Observables for plot events
-    svg_obs      = scope["svg"] = Observable("")
-    hover_obs    = scope["hover"] = Observable(Dict())
-    selected_obs = scope["selected"] = Observable(Dict())
-    click_obs    = scope["click"] = Observable(Dict())
-    relayout_obs = scope["relayout"] = Observable(Dict())
+    scope["svg"] = Observable("")
+    scope["hover"] = Observable(Dict())
+    scope["selected"] = Observable(Dict())
+    scope["click"] = Observable(Dict())
+    scope["relayout"] = Observable(Dict())
 
     # OUTPUT: setup an observable which sends modify commands
     scope["_commands"] = Observable{Any}([])
@@ -68,58 +72,55 @@ function WebIOPlot(args...; events=Dict(), kwargs...)
 
         window.onresize = () -> Plotly.Plots.resize(gd)
 
+        function save_svg()
+            Plotly.toImage(gd, $(Dict("format" => "svg"))).then(function(data)
+                @var svg_data = data.replace("data:image/svg+xml,", "")
+                $(scope["svg"])[] = decodeURIComponent(svg_data)
+            end)
+        end
+
         # Draw plot in container
         Plotly.newPlot(
             gd, $(lowered[:data]), $(lowered[:layout]), $(options)
-        ).then(gd -> Plotly.toImage(gd, Dict("format" => "svg"))
-        ).then(function(data)
-            @var svg_data = data.replace("data:image/svg+xml,", "")
-            $(scope["svg"])[] = decodeURIComponent(svg_data)
-        end
-        );
-
-        # I think this triggers too often (even on scroll/zoom)
-        # gd.on("plotly_afterplot", function()
-        #     Plotly.toImage(gd, $(Dict("format" => "svg"))).then(function(data)
-        #         @var svg_data = data.replace("data:image/svg+xml,", "")
-        #         $svg_obs[] = decodeURIComponent(svg_data)
-        #     end)
-        # end
-        # )
+        ).then(save_svg);
 
         # hook into plotly events
         gd.on("plotly_hover", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "hover");
             if !(filtered_data.isnil)
-                $hover_obs[] = filtered_data.out
+                $(scope["hover"])[] = filtered_data.out
             end
         end)
 
-        gd.on("plotly_unhover", () -> $hover_obs[] = Dict())
+        gd.on("plotly_unhover", () -> $(scope["hover"])[] = Dict())
 
         gd.on("plotly_selected", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "selected");
             if !(filtered_data.isnil)
-                $selected_obs[] = filtered_data.out
+                $(scope["selected"])[] = filtered_data.out
             end
         end)
 
-        gd.on("plotly_deselect", () -> $selected_obs[] = Dict())
+        gd.on("plotly_deselect", () -> $(scope["selected"])[] = Dict())
 
         gd.on("plotly_relayout", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "relayout");
             if !(filtered_data.isnil)
-                $relayout_obs[] = filtered_data.out
+                $(scope["relayout"])[] = filtered_data.out
             end
         end)
 
         gd.on("plotly_click", function (data)
             @var filtered_data = WebIO.CommandSets.Plotly.filterEventData(gd, data, "click");
             if !(filtered_data.isnil)
-                $click_obs[] = filtered_data.out
+                $(scope["click"])[] = filtered_data.out
             end
         end)
     end)
+
+    # create no-op `on` callback for svg so it is _always_ sent
+    # to us
+    on(scope["svg"]) do x end
 
     WebIOPlot(p, scope)
 end
